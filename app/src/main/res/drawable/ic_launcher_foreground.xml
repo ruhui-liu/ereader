@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An open book; the right page carries a small accent mark standing for the translation. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- left page -->
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M30,36 C38,33 46,33 52,37 L52,74 C46,70 38,70 30,73 Z" />
+    <!-- right page -->
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M56,37 C62,33 70,33 78,36 L78,73 C70,70 62,70 56,74 Z" />
+    <!-- text lines on the left page -->
+    <path
+        android:strokeColor="@color/launcher_background"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M35,44 L47,43 M35,50 L47,49 M35,56 L47,55 M35,62 L44,61.5" />
+    <!-- translation lines on the right page -->
+    <path
+        android:strokeColor="@color/launcher_accent"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M61,43 L73,44 M61,49 L73,50 M61,55 L73,56 M61,61.5 L70,62" />
+</vector>

@@ -1,0 +1,62 @@
+/* Static base styles of the reader shell. Dynamic values live in #yd-dynamic (see reader.js). */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden !important;
+}
+#yd-viewport {
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  overflow: hidden;
+}
+#yd-content {
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+  font-kerning: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  visibility: hidden;
+}
+#yd-content.yd-ready { visibility: visible; }
+html.yd-paged #yd-content {
+  column-fill: auto !important;
+  overflow: visible !important;
+  will-change: transform;
+}
+html.yd-paged #yd-viewport { touch-action: pan-y; }
+html.yd-scroll #yd-viewport { -webkit-overflow-scrolling: touch; }
+#yd-content img, #yd-content svg, #yd-content video, #yd-content figure, #yd-content table {
+  break-inside: avoid;
+}
+#yd-content img { object-fit: contain; }
+#yd-content pre { white-space: pre-wrap; }
+#yd-content h1, #yd-content h2, #yd-content h3, #yd-content h4 { break-after: avoid; }
+#yd-content .yd-txt-title { text-align: center; text-indent: 0 !important; margin: 1em 0 1.2em; font-size: 1.3em; }
+.yd-tr { display: block; font-style: normal; font-weight: normal; text-align: start; }
+.yd-tr-h { font-weight: bold; }
+.yd-end { display: block; height: 0; overflow: hidden; }
+#yd-chapter-footer {
+  display: block; text-align: center; padding: 2.5em 0 1.5em; opacity: .6; font-size: .85em;
+  text-indent: 0 !important;
+}
+::highlight(yd-search) { background-color: #ffd54f; color: #000; }
+mark.yd-search { background-color: #ffd54f; color: #000; }
+
+/* Footnote popup */
+#yd-note {
+  position: fixed; left: 12px; right: 12px; bottom: 12px;
+  max-height: 45vh; overflow: auto; z-index: 10;
+  border-radius: 14px; padding: 14px 16px;
+  box-shadow: 0 6px 28px rgba(0,0,0,.28);
+  writing-mode: horizontal-tb !important;
+  font-size: .9em; line-height: 1.6;
+}
+#yd-note[hidden] { display: none; }
