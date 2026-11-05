@@ -237,7 +237,7 @@ private fun SignInPrompt(state: CloudUiState, onDrive: () -> Unit, onDropbox: ()
                 Spacer(Modifier.height(8.dp))
             }
             Text(
-                "授权后可浏览云端硬盘中的 EPUB / TXT 并导入（只读权限）。\n\n" +
+                "授权后可浏览云端硬盘中的 EPUB / PDF / TXT 并导入（只读权限）。\n\n" +
                     "也可以安装 Google Drive 应用，然后在“导入 → 本地文件”的系统文件选择器里直接选择云端硬盘中的文件。",
                 style = MaterialTheme.typography.bodyMedium,
             )

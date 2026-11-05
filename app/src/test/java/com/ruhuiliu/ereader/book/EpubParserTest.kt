@@ -78,7 +78,7 @@ class EpubParserTest {
         assertTrue(pkg.vertical)
         assertFalse(pkg.fixedLayout)
         assertEquals(3, pkg.toc.size)
-        assertEquals("第一章 猫", pkg.toc[0].title)
+        assertEquals("第一章\u00A0猫", pkg.toc[0].title)
         assertEquals(0, pkg.toc[0].depth)
         assertEquals("一の二", pkg.toc[1].title)
         assertEquals(1, pkg.toc[1].depth)

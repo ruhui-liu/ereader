@@ -18,6 +18,7 @@ class BookRepository(private val db: AppDatabase, val storage: BookStorage) {
     suspend fun delete(book: BookEntity) = withContext(Dispatchers.IO) {
         books.delete(book.id)
         storage.bookDir(book).deleteRecursively()
+        storage.pageCacheDir(book).deleteRecursively()
     }
 
     suspend fun rename(id: Long, title: String, author: String) = books.rename(id, title, author)
@@ -28,6 +29,7 @@ class BookRepository(private val db: AppDatabase, val storage: BookStorage) {
     suspend fun setTranslateMode(id: Long, mode: Int) = books.setTranslateMode(id, mode)
     suspend fun setSourceLang(id: Long, lang: String?) = books.setSourceLang(id, lang)
     suspend fun setConvertToHorizontal(id: Long, value: Boolean) = books.setConvertToHorizontal(id, value)
+    suspend fun setPdfReflow(id: Long, value: Boolean) = books.setPdfReflow(id, value)
 
     fun observeBookmarks(bookId: Long): Flow<List<BookmarkEntity>> = bookmarks.observe(bookId)
     suspend fun addBookmark(b: BookmarkEntity) = bookmarks.insert(b)

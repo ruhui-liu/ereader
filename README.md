@@ -5,7 +5,7 @@
 ## 功能
 
 **书籍导入**
-- 格式：EPUB（EPUB 2 / 3）、TXT（自动识别 UTF-8 / GBK / GB18030 / Big5 / Shift_JIS / EUC-JP / UTF-16 编码并自动分章）、HTML
+- 格式：EPUB（EPUB 2 / 3）、PDF、TXT（自动识别 UTF-8 / GBK / GB18030 / Big5 / Shift_JIS / EUC-JP / UTF-16 编码并自动分章）、HTML
 - 本地导入：选择文件（可多选）、导入整个文件夹、从其他 App“打开方式 / 分享”到本应用
 - Google Drive：应用内浏览“我的云端硬盘 / 与我共享”，支持全盘搜索，Google 文档可导出为纯文本导入
 - Dropbox：应用内浏览文件夹并下载导入
@@ -27,6 +27,13 @@
   | Anthropic Claude | 通过官方 Java SDK 调用，可选 Opus 5.5 / Sonnet 5.5 / Haiku 5.5 |
 - 大模型翻译支持自定义要求（例如“人名保留原文”“语气口语化”）
 - 译文语言：简体中文、繁体中文、英语、日语、韩语
+
+**PDF**
+- 两种显示方式，阅读时点顶栏的“重排 / 原版”或在“外观”里切换，会停留在同一页：
+  - **原版页面**：按原样显示每一页，可双指缩放；页面颜色跟随纸张 / 护眼 / 夜间背景（夜间自动反色）。开启翻译后，每页的中文译文显示在该页下方
+  - **文字重排**：提取文字并重新分段（自动去掉页眉页脚和页码、合并跨行断词和跨页段落），之后和 EPUB 一样可以调字体字号、逐段双语对照、全书搜索；插图或扫描页以图片显示
+- 竖排的日文 PDF 也能正确提取（按从右到左的列顺序），默认直接以横排的文字重排模式打开
+- PDF 目录（书签大纲）、阅读进度按页记录，状态栏显示“第 N/总 页”
 
 **竖排书转横排**
 - 自动识别竖排书（`writing-mode: vertical-rl`、`page-progression-direction="rtl"` 等）
@@ -92,8 +99,9 @@
 
 ```bash
 ./gradlew :app:assembleRelease      # 输出在 app/build/outputs/apk/release/
-./gradlew :app:testDebugUnitTest    # 单元测试（EPUB 解析、TXT 编码与分章、翻译结果解析等）
+./gradlew :app:testDebugUnitTest    # 单元测试（EPUB 解析、PDF 版面分析、TXT 编码与分章、翻译结果解析等）
 node tools/reader-js-test/run.js    # 阅读引擎测试（需要 playwright，详见文件头注释）
+node tools/reader-js-test/pdf.js    # PDF 原版页面 / 文字重排的引擎测试
 ```
 
 Release 版默认用仓库内的调试密钥签名，方便个人安装。要公开发布请准备自己的密钥，在 `local.properties` 中设置 `release.storeFile`、`release.storePassword`、`release.keyAlias`、`release.keyPassword`。
@@ -104,7 +112,7 @@ Release 版默认用仓库内的调试密钥签名，方便个人安装。要公
 app/src/main/
 ├── assets/reader/            阅读引擎（WebView 内运行）：分页、竖排转横排、双语插入、锚点、搜索高亮、脚注
 ├── java/com/ruhuiliu/ereader/
-│   ├── book/                 EPUB 解析（OPF / nav / NCX / 封面 / 竖排识别）、TXT 编码识别与分章、HTML
+│   ├── book/                 EPUB 解析（OPF / nav / NCX / 封面 / 竖排识别）、PDF（页面渲染、文字提取与版面分析）、TXT 编码识别与分章、HTML
 │   ├── data/                 Room 数据库（书籍、书签、翻译缓存）、DataStore 设置、导入
 │   ├── translate/            翻译引擎（ML Kit / Google / DeepL / Azure / OpenAI 兼容 / Claude）与缓存
 │   ├── cloud/                Google Drive（REST + Google 授权）、Dropbox（官方 SDK）
@@ -114,7 +122,9 @@ app/src/main/
 
 ## 已知限制
 
-- 暂不支持 PDF、MOBI / AZW3；带 DRM 的书无法打开。
+- 暂不支持 MOBI / AZW3；带 DRM 的书、加密（有密码）的 PDF 无法打开。
+- 扫描版 PDF（整页是图片、没有文字层）只能按原版页面阅读，无法翻译（暂无 OCR）。
+- PDF 的文字重排对普通书籍排版效果较好；多栏、表格、公式较多的 PDF 建议用原版页面模式。
 - 固定版式（漫画、图片为主）的 EPUB 能显示，但无法翻译，也无法转为横排。
 - ML Kit 的中文译文只有简体；选择繁体时请换用其他引擎。
 - 竖排保持原样时，脚注弹窗等少数界面仍为横排。

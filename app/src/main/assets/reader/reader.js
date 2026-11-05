@@ -58,7 +58,8 @@
       fontSize: 19, lineHeight: 1.75, paraSpacing: 0.6, marginH: 22, marginV: 30,
       fontFamily: '', customFontUrl: '', bg: '#ffffff', fg: '#222222', trColor: '#2f6db3', linkColor: '#2f6db3',
       textAlign: 'justify', indent: '2em', override: true, showRuby: true, paged: true, vertical: false,
-      forceHorizontal: false, rtl: false, animate: true, trMode: 0, trScale: 0.92, bookLang: '', trLang: 'zh-CN'
+      forceHorizontal: false, rtl: false, animate: true, trMode: 0, trScale: 0.92, bookLang: '', trLang: 'zh-CN',
+      dark: false, zoom: false
     },
     chapter: null,        // { index, url, mime, count }
     page: 0,
@@ -72,6 +73,8 @@
     trEls: {},            // block id -> translation element
     loadToken: 0,
     lastAnchor: null,
+    pdfPages: [],         // <section class="yd-pdf-page"> elements (PDF original-page mode)
+    pdfMarks: [],         // all elements carrying data-pdf-page (both PDF modes)
     reportTimer: 0,
     relayoutTimer: 0,
     ready: false,
@@ -202,6 +205,17 @@
     var maxW = W - 2 * mh, maxH = H - 2 * mv;
     c += '#yd-content img,#yd-content svg,#yd-content video{max-width:' + maxW + 'px !important;max-height:' + maxH + 'px !important;}';
     c += '#yd-content img{height:auto;}';
+    // PDF pages: one page per screen in paged mode; page images take the theme's paper colour.
+    c += '.yd-pdf-page{break-before:column;text-align:center;margin:0 !important;padding:0 !important;text-indent:0 !important;}';
+    c += '.yd-pdf-page:first-child{break-before:auto;}';
+    c += 'html.yd-scroll .yd-pdf-page{break-before:auto;margin-bottom:14px !important;}';
+    c += '#yd-content .yd-pdf-page,#yd-content .yd-pdf-figure{background-color:' + s.bg + ' !important;}';
+    c += '.yd-pdf-figure{margin:0 0 1em !important;text-align:center;text-indent:0 !important;}';
+    c += '.yd-pdf-page img,.yd-pdf-figure img{display:block;margin:0 auto;' +
+      (s.dark ? 'filter:invert(1) hue-rotate(180deg);mix-blend-mode:screen;' : 'mix-blend-mode:multiply;') + '}';
+    c += '.yd-pdf-text>p,.yd-pdf-text>h3{display:none !important;}';
+    c += '.yd-pdf-text{text-align:start;}';
+    c += '.yd-pdf-mark{display:block;height:0;overflow:hidden;margin:0 !important;}';
     // Translations.
     c += '.yd-tr{color:' + s.trColor + ' !important;font-size:' + s.trScale + 'em !important;line-height:' + s.lineHeight +
       ' !important;text-indent:0 !important;margin-block-start:0.15em !important;margin-block-end:' + (s.paraSpacing + 0.35) + 'em !important;}';
@@ -278,7 +292,7 @@
 
     S.blocks = blocks;
     S.blockText = blockText.map(function (t) {
-      return t.replace(/[ \t\r\f\v ]+/g, ' ').replace(/ *\n */g, '\n').replace(/^\s+|\s+$/g, '');
+      return t.replace(/[ \t\r\f\v\u00A0]+/g, ' ').replace(/ *\n */g, '\n').replace(/^\s+|\s+$/g, '');
     });
     S.texts = texts;
   }
@@ -316,8 +330,43 @@
     return scrollPos() + (isVertical() ? S.settings.marginH : S.settings.marginV) * 0.5;
   }
 
-  /** Captures the first visible character as { b: block, o: offset }. */
+  /** Extent of a PDF page section along the reading direction: { s: start, e: end }. */
+  function sectionSpan(el) {
+    var rects = el.getClientRects();
+    if (!rects.length) return null;
+    var first = rects[0], last = rects[rects.length - 1];
+    var s0 = absPos(first);
+    var ext = isPaged() ? (isVertical() ? last.height : last.width) : (isVertical() ? last.width : last.height);
+    return { s: s0, e: Math.max(absPos(last) + ext, s0 + 1) };
+  }
+
+  /** Lead before the first content of a screen page / scroll position. */
+  function leadIn() {
+    if (isPaged()) return (isVertical() ? S.settings.marginV : S.settings.marginH) + 2;
+    return (isVertical() ? S.settings.marginH : S.settings.marginV) + 2;
+  }
+
+  /** PDF original-page mode: the page at the top of the view, plus how far into it we are. */
+  function capturePageAnchor() {
+    settle();
+    var start = currentStart();
+    var lim = start + leadIn();
+    var cur = null, span = null;
+    for (var i = 0; i < S.pdfPages.length; i++) {
+      var sp = sectionSpan(S.pdfPages[i]);
+      if (!sp) continue;
+      if (cur === null || sp.s <= lim) { cur = S.pdfPages[i]; span = sp; }
+      if (sp.s > lim) break;
+    }
+    if (!cur) return null;
+    var f = Math.max(0, Math.min(1, (start - span.s) / (span.e - span.s)));
+    var bEl = cur.querySelector('[data-yd-b]');
+    return { p: +cur.getAttribute('data-pdf-page'), f: f, b: bEl ? +bEl.getAttribute('data-yd-b') : 0, o: 0 };
+  }
+
+  /** Captures the first visible character as { b: block, o: offset } (or a PDF page anchor). */
   function captureAnchor() {
+    if (S.pdfPages.length) return capturePageAnchor();
     if (!S.texts.length) return null;
     settle();
     var start = currentStart();
@@ -339,9 +388,15 @@
     return { b: t.b, o: t.start + best };
   }
 
-  function anchorString(a) { return a ? a.b + ':' + a.o : null; }
+  function anchorString(a) {
+    if (!a) return null;
+    if (a.p !== undefined) return 'p' + a.p + ':' + a.f.toFixed(4);
+    return a.b + ':' + a.o;
+  }
   function parseAnchor(s) {
     if (!s) return null;
+    var pm = /^p(\d+):([\d.]+)$/.exec(String(s));
+    if (pm) return { p: +pm[1], f: +pm[2], b: 0, o: 0 };
     var m = /^(\d+):(\d+)$/.exec(String(s));
     return m ? { b: +m[1], o: +m[2] } : null;
   }
@@ -349,6 +404,16 @@
   /** Absolute position of an anchor, or null. */
   function anchorPos(a) {
     if (!a) return null;
+    if (a.p !== undefined) {
+      var pel = content.querySelector('[data-pdf-page="' + a.p + '"]');
+      if (!pel) return null;
+      if (pel.classList.contains('yd-pdf-page')) {
+        var sp = sectionSpan(pel);
+        return sp ? sp.s + (a.f || 0) * (sp.e - sp.s) : null;
+      }
+      var pr = rectOfElement(pel) || pel.getBoundingClientRect();
+      return pr ? absPos(pr) : null;
+    }
     var cand = null;
     for (var i = 0; i < S.texts.length; i++) {
       var t = S.texts[i];
@@ -488,8 +553,35 @@
     return m > 0 ? Math.min(1, scrollPos() / m) : 0;
   }
 
+  /**
+   * 0-based PDF page shown on screen (-1 for non-PDF books): the first page that starts on the visible screen,
+   * or else the page continuing from before it.
+   */
+  function currentPdfPage(a) {
+    if (a && a.p !== undefined) return a.p;
+    if (!S.pdfMarks.length) return -1;
+    settle();
+    var from, to;
+    if (isPaged()) { from = S.page * pageSize(); to = from + pageSize(); }
+    else { from = scrollPos(); to = from + (isVertical() ? viewport.clientWidth : viewport.clientHeight); }
+    var before = +S.pdfMarks[0].getAttribute('data-pdf-page');
+    for (var i = 0; i < S.pdfMarks.length; i++) {
+      var el = S.pdfMarks[i];
+      var r = rectOfElement(el) || el.getBoundingClientRect();
+      if (!r) continue;
+      var pos = absPos(r);
+      if (pos >= from - 1 && pos < to) return +el.getAttribute('data-pdf-page');
+      if (pos < from) before = +el.getAttribute('data-pdf-page'); else break;
+    }
+    return before;
+  }
+
   function excerptAt(a) {
     if (!a) return '';
+    if (a.p !== undefined) {
+      var txt = (S.blockText[a.b] || '').replace(/\s+/g, ' ').trim().substring(0, 60);
+      return '第 ' + (a.p + 1) + ' 页' + (txt ? '  ' + txt : '');
+    }
     var t = S.blockText[a.b] || '';
     // Offsets are in raw text; normalized text is close enough for an excerpt.
     var start = Math.max(0, Math.min(t.length, a.o - 2));
@@ -521,7 +613,8 @@
       fraction: fraction(),
       anchor: anchorString(a),
       block: a ? a.b : 0,
-      excerpt: excerptAt(a)
+      excerpt: excerptAt(a),
+      pdfPage: currentPdfPage(a)
     });
   }
 
@@ -699,15 +792,19 @@
       var end = document.createElement('span');
       end.id = 'yd-end';
       end.className = 'yd-end yd-ui';
-      end.textContent = '​';
+      end.textContent = '\u200B';
       content.appendChild(end);
 
       if (S.settings.forceHorizontal) convertVerticalForms(content);
       indexContent();
+      S.pdfPages = Array.prototype.slice.call(content.querySelectorAll('section.yd-pdf-page'));
+      S.pdfMarks = Array.prototype.slice.call(content.querySelectorAll('[data-pdf-page]'));
 
       var imgs = Array.prototype.slice.call(content.querySelectorAll('img'));
       imgs.forEach(function (img) {
-        if (!img.complete) {
+        // Images with known dimensions (e.g. PDF pages) don't change the layout when they arrive.
+        var sized = img.hasAttribute('width') && img.hasAttribute('height');
+        if (!img.complete && !sized) {
           waits.push(new Promise(function (res) { img.addEventListener('load', res); img.addEventListener('error', res); }));
           img.addEventListener('load', function () { if (S.ready && token === S.loadToken) scheduleRelayout(); });
         }
@@ -976,8 +1073,22 @@
 
   // ------------------------------------------------------------------ input
 
+  function applyZoom() {
+    var meta = document.querySelector('meta[name=viewport]');
+    var z = !!S.settings.zoom;
+    if (meta) {
+      meta.setAttribute('content', 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=' + (z ? '5' : '1') +
+        ', user-scalable=' + (z ? 'yes' : 'no') + ', viewport-fit=cover');
+    }
+    viewport.style.touchAction = z ? 'pan-x pan-y pinch-zoom' : '';
+  }
+
+  /** True while the user has pinch-zoomed into a PDF page: taps and swipes then pan instead of turning pages. */
+  function zoomed() { return !!(window.visualViewport && window.visualViewport.scale > 1.05); }
+
   function onClick(e) {
     if (S.suppressClick) { S.suppressClick = false; e.preventDefault(); e.stopPropagation(); return; }
+    if (zoomed()) return;
     var sel = window.getSelection();
     if (S.touch && S.touch.hadSelection) return;
     if (sel && !sel.isCollapsed) return;
@@ -1010,6 +1121,7 @@
   function onTouchMove(e) {
     var T = S.touch;
     if (!T || !isPaged() || !S.ready || !note.hidden) return;
+    if (e.touches.length !== 1 || zoomed()) { T.dragging = false; S.touch = null; return; }
     var t = e.touches[0];
     var dx = t.clientX - T.x, dy = t.clientY - T.y;
     var sel = window.getSelection();
@@ -1066,6 +1178,7 @@
       var prevS = S.settings;
       var a = S.ready ? captureAnchor() : null;
       S.settings = Object.assign({}, S.settings, s || {});
+      if (prevS.zoom !== S.settings.zoom) applyZoom();
       var hzChanged = prevS.forceHorizontal !== S.settings.forceHorizontal;
       if (hzChanged && S.chapter) {
         // Reload so vertical presentation forms and layout are rebuilt from scratch.

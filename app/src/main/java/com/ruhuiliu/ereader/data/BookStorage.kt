@@ -5,15 +5,26 @@ import com.ruhuiliu.ereader.book.BookContent
 import com.ruhuiliu.ereader.book.BookFormat
 import com.ruhuiliu.ereader.book.HtmlBook
 import com.ruhuiliu.ereader.book.epub.EpubBook
+import com.ruhuiliu.ereader.book.pdf.PdfBook
 import com.ruhuiliu.ereader.book.txt.TxtBook
 import com.ruhuiliu.ereader.data.db.BookEntity
 import java.io.File
 
 /** Where books, covers and fonts live inside the app's private storage. */
-class BookStorage(context: Context) {
+class BookStorage(private val context: Context) {
     val booksRoot = File(context.filesDir, "books").apply { mkdirs() }
     val fontsDir = File(context.filesDir, "fonts").apply { mkdirs() }
     val tempDir = File(context.cacheDir, "import").apply { mkdirs() }
+
+    /** Rendered PDF pages (can be cleared by the system at any time). */
+    fun pageCacheDir(book: BookEntity) = File(context.cacheDir, "pdfpages/${book.dirName}")
+
+    /** Pixel width for rendered PDF pages: 1.5× the narrow screen side, enough to zoom in a little. */
+    val pdfRenderWidth: Int
+        get() {
+            val m = context.resources.displayMetrics
+            return (minOf(m.widthPixels, m.heightPixels) * 1.5f).toInt().coerceIn(800, 2000) / 8 * 8
+        }
 
     fun bookDir(book: BookEntity) = File(booksRoot, book.dirName)
 
@@ -25,6 +36,14 @@ class BookStorage(context: Context) {
             BookFormat.EPUB -> EpubBook(File(dir, book.fileName))
             BookFormat.TXT -> TxtBook(File(dir, book.fileName), File(dir, TXT_INDEX))
             BookFormat.HTML -> HtmlBook(File(dir, book.fileName))
+            BookFormat.PDF -> PdfBook(
+                file = File(dir, book.fileName),
+                workDir = dir,
+                imageCacheDir = pageCacheDir(book),
+                renderWidth = pdfRenderWidth,
+                reflow = book.pdfReflow,
+                language = book.language,
+            )
         }
     }
 

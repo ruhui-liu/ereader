@@ -182,7 +182,7 @@ class CloudViewModel(private val app: AppContainer, val provider: String) : View
         } else if (entry.importable) {
             download(entry)
         } else {
-            events.trySend(CloudEvent.Message("不支持这种文件格式（支持 EPUB / TXT / HTML）"))
+            events.trySend(CloudEvent.Message("不支持这种文件格式（支持 EPUB / PDF / TXT / HTML）"))
         }
     }
 

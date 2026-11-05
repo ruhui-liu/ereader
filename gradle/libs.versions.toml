@@ -23,6 +23,8 @@ anthropic = "3.5.0"
 junit = "4.13.2"
 orgJson = "20250517"
 kxml2 = "2.3.0"
+pdfboxAndroid = "2.0.27.0"
+pdfboxDesktop = "2.0.37"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -57,6 +59,8 @@ anthropic-java = { group = "com.anthropic", name = "anthropic-java", version.ref
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 kxml2 = { group = "net.sf.kxml", name = "kxml2", version.ref = "kxml2" }
+pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
+pdfbox-desktop = { group = "org.apache.pdfbox", name = "pdfbox", version.ref = "pdfboxDesktop" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

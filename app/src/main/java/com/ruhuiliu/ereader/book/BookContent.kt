@@ -2,7 +2,7 @@ package com.ruhuiliu.ereader.book
 
 import java.io.Closeable
 
-enum class BookFormat { EPUB, TXT, HTML }
+enum class BookFormat { EPUB, TXT, HTML, PDF }
 
 /** One reading-order document (EPUB spine item / TXT chapter). */
 data class Chapter(

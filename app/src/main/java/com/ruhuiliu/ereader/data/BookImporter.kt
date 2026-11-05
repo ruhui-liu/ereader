@@ -1,6 +1,10 @@
 package com.ruhuiliu.ereader.data
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
@@ -8,10 +12,12 @@ import com.ruhuiliu.ereader.book.BookFormat
 import com.ruhuiliu.ereader.book.HtmlText
 import com.ruhuiliu.ereader.book.LanguageGuess
 import com.ruhuiliu.ereader.book.epub.EpubBook
+import com.ruhuiliu.ereader.book.pdf.PdfBook
 import com.ruhuiliu.ereader.book.txt.TextDecoding
 import com.ruhuiliu.ereader.book.txt.TxtBook
 import com.ruhuiliu.ereader.data.db.BookDao
 import com.ruhuiliu.ereader.data.db.BookEntity
+import com.tom_roush.pdfbox.pdmodel.PDDocument
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -32,7 +38,7 @@ class BookImporter(
     private val dao: BookDao,
 ) {
     companion object {
-        val SUPPORTED_EXTENSIONS = setOf("epub", "txt", "text", "md", "html", "htm", "xhtml")
+        val SUPPORTED_EXTENSIONS = setOf("epub", "pdf", "txt", "text", "md", "html", "htm", "xhtml")
 
         fun isSupportedName(name: String) = name.substringAfterLast('.', "").lowercase() in SUPPORTED_EXTENSIONS
     }
@@ -91,7 +97,7 @@ class BookImporter(
         try {
             dao.findByHash(hash)?.let { return ImportResult.Duplicate(it) }
             val format = detectFormat(temp, displayName)
-                ?: return ImportResult.Failed(displayName, "不支持的文件格式（支持 EPUB、TXT、HTML）")
+                ?: return ImportResult.Failed(displayName, "不支持的文件格式（支持 EPUB、PDF、TXT、HTML）")
             val dirName = UUID.randomUUID().toString()
             val dir = File(storage.booksRoot, dirName).apply { mkdirs() }
             try {
@@ -99,6 +105,7 @@ class BookImporter(
                     BookFormat.EPUB -> importEpub(temp, dir, dirName, displayName, hash, source)
                     BookFormat.TXT -> importTxt(temp, dir, dirName, displayName, hash, source)
                     BookFormat.HTML -> importHtml(temp, dir, dirName, displayName, hash, source)
+                    BookFormat.PDF -> importPdf(temp, dir, dirName, displayName, hash, source)
                 }
                 val id = dao.insert(entity)
                 return ImportResult.Added(entity.copy(id = id))
@@ -114,11 +121,13 @@ class BookImporter(
     private fun detectFormat(file: File, name: String): BookFormat? {
         when (name.substringAfterLast('.', "").lowercase()) {
             "epub" -> return BookFormat.EPUB
+            "pdf" -> return BookFormat.PDF
             "txt", "text", "md" -> return BookFormat.TXT
             "html", "htm", "xhtml" -> return BookFormat.HTML
         }
         // Unknown extension: sniff the content.
         val head = file.inputStream().use { s -> ByteArray(4096).let { b -> b.copyOf(s.read(b).coerceAtLeast(0)) } }
+        if (String(head, 0, minOf(head.size, 1024), Charsets.ISO_8859_1).contains("%PDF-")) return BookFormat.PDF
         if (head.size >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte()) {
             val isEpub = runCatching { ZipFile(file).use { it.getEntry("META-INF/container.xml") != null } }.getOrDefault(false)
             return if (isEpub) BookFormat.EPUB else null
@@ -205,6 +214,68 @@ class BookImporter(
             fileSize = temp.length(),
             fileHash = hash,
             source = source,
+        )
+    }
+
+    private fun importPdf(temp: File, dir: File, dirName: String, displayName: String, hash: String, source: String): BookEntity {
+        val target = File(dir, "book.pdf")
+        temp.copyTo(target, overwrite = true)
+        // Cover: the first page rendered by the platform renderer (also validates the file).
+        try {
+            ParcelFileDescriptor.open(target, ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
+                PdfRenderer(fd).use { r ->
+                    if (r.pageCount == 0) throw IllegalArgumentException("PDF 没有页面")
+                    r.openPage(0).use { page ->
+                        val w = 480
+                        val h = (w.toFloat() * page.height / page.width).toInt().coerceIn(1, 2000)
+                        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(Color.WHITE)
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        File(dir, "cover.jpg").outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+                        bmp.recycle()
+                    }
+                }
+            }
+        } catch (e: SecurityException) {
+            throw IllegalArgumentException("暂不支持加密（有密码）的 PDF")
+        }
+        // Metadata and a text sample (language, vertical writing, whether there is any text at all).
+        var title = ""
+        var author = ""
+        var sampleText = ""
+        var vertical = false
+        runCatching {
+            PDDocument.load(target).use { doc ->
+                doc.documentInformation?.let { info ->
+                    title = info.title?.trim().orEmpty()
+                    author = info.author?.trim().orEmpty()
+                }
+                val pages = PdfBook.sample(doc, 8)
+                sampleText = pages.flatMap { it.paragraphs }.joinToString("\n") { it.text }
+                val withText = pages.filter { it.paragraphs.isNotEmpty() }
+                vertical = withText.isNotEmpty() && withText.count { it.vertical } * 2 > withText.size
+            }
+        }
+        // Titles like "Microsoft Word - draft.docx" or "untitled" are useless.
+        if (title.isBlank() || title.length < 2 || Regex("^(untitled|microsoft word|document)", RegexOption.IGNORE_CASE).containsMatchIn(title)) {
+            title = displayName.substringBeforeLast('.')
+        }
+        val hasText = sampleText.count { !it.isWhitespace() } > 200
+        return BookEntity(
+            title = title,
+            author = author,
+            format = BookFormat.PDF.name,
+            dirName = dirName,
+            fileName = target.name,
+            coverFile = "cover.jpg",
+            language = LanguageGuess.guess(sampleText.take(20_000)),
+            vertical = vertical,
+            rtl = vertical,
+            fileSize = target.length(),
+            fileHash = hash,
+            source = source,
+            // Vertical (tategaki) PDFs open as re-flowed horizontal text by default.
+            pdfReflow = vertical && hasText,
         )
     }
 

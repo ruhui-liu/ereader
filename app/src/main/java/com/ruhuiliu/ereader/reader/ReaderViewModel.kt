@@ -7,6 +7,7 @@ import com.ruhuiliu.ereader.book.BookContent
 import com.ruhuiliu.ereader.book.BookFormat
 import com.ruhuiliu.ereader.book.BookPaths
 import com.ruhuiliu.ereader.book.TocItem
+import com.ruhuiliu.ereader.book.pdf.PdfBook
 import com.ruhuiliu.ereader.data.db.BookEntity
 import com.ruhuiliu.ereader.data.db.BookmarkEntity
 import com.ruhuiliu.ereader.data.settings.Engines
@@ -44,7 +45,16 @@ sealed interface SelectionTranslation {
     data class Failed(val text: String, val message: String) : SelectionTranslation
 }
 
-data class SearchHit(val chapterIndex: Int, val chapterTitle: String, val occurrence: Int, val snippet: String, val matchStart: Int, val matchLength: Int)
+data class SearchHit(
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val occurrence: Int,
+    val snippet: String,
+    val matchStart: Int,
+    val matchLength: Int,
+    /** 0-based PDF page of the match, or -1. */
+    val pdfPage: Int = -1,
+)
 
 data class SearchState(val query: String = "", val running: Boolean = false, val hits: List<SearchHit> = emptyList())
 
@@ -63,6 +73,11 @@ data class ReaderUiState(
     val excerpt: String = "",
     val menuVisible: Boolean = false,
     val translation: TranslationStatus = TranslationStatus.Idle,
+    /** PDF: 0-based page at the top of the view (-1 for other formats) and the page count. */
+    val pdfPage: Int = -1,
+    val pdfPageCount: Int = 0,
+    /** Short-lived progress message, e.g. while extracting PDF text. */
+    val busy: String? = null,
 )
 
 sealed interface ReaderEvent {
@@ -125,6 +140,7 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
                 }
                 val opened = withContext(Dispatchers.IO) { app.storage.open(book) }
                 content = opened
+                (opened as? PdfBook)?.withText = book.translateMode != 0
                 weights = opened.chapters.map { maxOf(1L, it.size) }
                 _state.update {
                     it.copy(
@@ -133,6 +149,7 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
                         toc = opened.toc,
                         chapterCount = opened.chapters.size,
                         chapterIndex = book.chapterIndex.coerceIn(0, opened.chapters.size - 1),
+                        pdfPageCount = (opened as? PdfBook)?.pageCount ?: 0,
                         chapterFraction = book.chapterProgress,
                         totalProgress = book.totalProgress,
                         anchor = book.anchor,
@@ -205,19 +222,23 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
             rs.fontFamily == "mono" -> "monospace"
             else -> ""
         }
+        val isPdf = book?.format == BookFormat.PDF.name
+        val pdfOriginal = isPdf && book?.pdfReflow != true
         val isJaEpub = book?.format == BookFormat.EPUB.name && book.language?.startsWith("ja") == true
         val indent = when {
             !rs.indent -> "0"
             isJaEpub -> "" // Japanese books indent with a full-width space in the text itself.
+            isPdf && book?.language?.startsWith("ja") == true -> "1em"
             else -> "2em"
         }
-        val keepVertical = book?.vertical == true && !book.convertToHorizontal
+        // Vertical PDFs are never laid out vertically: original pages are images, re-flowed text is horizontal.
+        val keepVertical = !isPdf && book?.vertical == true && !book.convertToHorizontal
         return JSONObject()
             .put("fontSize", rs.fontSize)
             .put("lineHeight", rs.lineHeight.toDouble())
             .put("paraSpacing", rs.paragraphSpacing.toDouble())
-            .put("marginH", rs.marginH)
-            .put("marginV", rs.marginV)
+            .put("marginH", if (pdfOriginal) 6 else rs.marginH)
+            .put("marginV", if (pdfOriginal) 22 else rs.marginV)
             .put("fontFamily", family)
             .put("customFontUrl", if (custom) FONT_BASE + BookPaths.encodePath(rs.fontFamily.removePrefix("custom:")) else "")
             .put("bg", theme.bg.toCss())
@@ -231,7 +252,9 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
             .put("paged", rs.pageMode == "paged")
             .put("vertical", keepVertical)
             .put("forceHorizontal", !keepVertical)
-            .put("rtl", keepVertical)
+            .put("rtl", if (isPdf) pdfOriginal && book?.rtl == true else keepVertical)
+            .put("zoom", pdfOriginal)
+            .put("dark", theme.isDark)
             .put("animate", rs.pageAnimation)
             .put("trMode", book?.translateMode ?: 0)
             .put("trScale", rs.translationScale.toDouble())
@@ -254,7 +277,9 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
                 maybeStart()
             }
             "chapterLoaded" -> {
+                _state.update { it.copy(busy = null) }
                 if ((_state.value.book?.translateMode ?: 0) != 0) js("Reader.requestBlocks()")
+                prefetchPdfText(msg.optInt("index") + 1)
             }
             "position" -> onPosition(msg)
             "boundary" -> {
@@ -299,7 +324,13 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
         val fraction = msg.optDouble("fraction", 0.0).toFloat().coerceIn(0f, 1f)
         val anchor = msg.optString("anchor").ifEmpty { null }
         currentBlock = msg.optInt("block", 0)
-        val total = totalProgress(index, fraction)
+        val pdfPage = msg.optInt("pdfPage", -1)
+        val total = if (pdfPage >= 0 && _state.value.pdfPageCount > 0) {
+            // PDF chapters are page ranges: page-based progress is more exact.
+            ((pdfPage + 1).toFloat() / _state.value.pdfPageCount).coerceIn(0f, 1f)
+        } else {
+            totalProgress(index, fraction)
+        }
         _state.update {
             it.copy(
                 page = msg.optInt("page"),
@@ -308,6 +339,7 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
                 totalProgress = total,
                 anchor = anchor,
                 excerpt = msg.optString("excerpt"),
+                pdfPage = pdfPage,
             )
         }
         saveJob?.cancel()
@@ -425,6 +457,13 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
             repo.setTranslateMode(bookId, mode)
             _state.update { it.copy(book = it.book?.copy(translateMode = mode)) }
             pushSettings()
+            val pdf = content as? PdfBook
+            if (pdf != null && mode != 0 && !pdf.withText) {
+                // Original PDF pages were served without their text; reload them with it.
+                pdf.withText = true
+                reloadPdfAtCurrentPage(pdf)
+                return@launch
+            }
             if (mode == 0) {
                 translateJob?.cancel()
                 _state.update { it.copy(translation = TranslationStatus.Idle) }
@@ -441,6 +480,43 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
             js("Reader.clearTranslations()")
             if ((_state.value.book?.translateMode ?: 0) != 0) js("Reader.requestBlocks()")
         }
+    }
+
+    // ------------------------------------------------------------------ PDF
+
+    /** Switches a PDF between original page images and re-flowed text, staying on the same page. */
+    fun setPdfReflow(value: Boolean) {
+        val pdf = content as? PdfBook ?: return
+        viewModelScope.launch {
+            repo.setPdfReflow(bookId, value)
+            pdf.reflow = value
+            _state.update { it.copy(book = it.book?.copy(pdfReflow = value)) }
+            pushSettings()
+            reloadPdfAtCurrentPage(pdf)
+        }
+    }
+
+    private suspend fun reloadPdfAtCurrentPage(pdf: PdfBook) {
+        val s = _state.value
+        val page = s.pdfPage.takeIf { it >= 0 } ?: pdf.pageRange(s.chapterIndex).first
+        val chapter = pdf.chapterOfPage(page)
+        if (pdf.reflow || pdf.withText) {
+            _state.update { it.copy(busy = "正在提取文字…") }
+            runCatching { withContext(Dispatchers.IO) { pdf.chapterParagraphs(chapter) } }
+                .onFailure { e -> events.trySend(ReaderEvent.Toast("提取文字失败：${e.message}")) }
+            _state.update { it.copy(busy = null) }
+        }
+        loadChapter(chapter, JSONObject().put("type", "fragment").put("id", "yd-page-$page"))
+    }
+
+    private var prefetchJob: Job? = null
+
+    /** Extracts the text of the next PDF chapter in the background so turning the page is instant. */
+    private fun prefetchPdfText(chapter: Int) {
+        val pdf = content as? PdfBook ?: return
+        if (!(pdf.reflow || pdf.withText) || chapter !in pdf.chapters.indices) return
+        prefetchJob?.cancel()
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) { runCatching { pdf.chapterParagraphs(chapter) } }
     }
 
     fun setConvertToHorizontal(value: Boolean) {
@@ -614,7 +690,8 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
                     val raw = text.substring(s, e)
                     val snippet = raw.replace(Regex("\\s+"), " ")
                     val matchStart = snippet.indexOf(text.substring(at, at + q.length).replace(Regex("\\s+"), " "), ignoreCase = true)
-                    hits += SearchHit(i, chapterTitle(i), occ, snippet, matchStart.coerceAtLeast(0), q.length)
+                    val page = (c as? PdfBook)?.pageOfOffset(i, text, at) ?: -1
+                    hits += SearchHit(i, chapterTitle(i), occ, snippet, matchStart.coerceAtLeast(0), q.length, page)
                     occ++
                     from = at + q.length
                 }
@@ -627,6 +704,13 @@ class ReaderViewModel(private val app: AppContainer, private val bookId: Long) :
 
     fun openSearchHit(hit: SearchHit) {
         val q = _search.value.query
+        val pdf = content as? PdfBook
+        if (pdf != null && !pdf.reflow && hit.pdfPage >= 0) {
+            // Original page images can't be highlighted: go to the page.
+            if (hit.chapterIndex == _state.value.chapterIndex) js("Reader.goToFragment(${JSONObject.quote("yd-page-${hit.pdfPage}")})")
+            else loadChapter(hit.chapterIndex, JSONObject().put("type", "fragment").put("id", "yd-page-${hit.pdfPage}"))
+            return
+        }
         if (hit.chapterIndex == _state.value.chapterIndex) {
             js("Reader.search(${JSONObject.quote(q)}, ${hit.occurrence})")
         } else {

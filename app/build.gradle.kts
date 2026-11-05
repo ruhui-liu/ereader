@@ -159,8 +159,12 @@ dependencies {
 
     // Text encoding detection for TXT books
     implementation(libs.juniversalchardet)
+    // PDF text extraction (pages are rendered with the platform PdfRenderer)
+    implementation(libs.pdfbox.android)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
     testImplementation(libs.kxml2)
+    // Desktop PDFBox (same API as PdfBox-Android) to test the text layout analysis on real PDFs.
+    testImplementation(libs.pdfbox.desktop)
 }

@@ -9,6 +9,7 @@ import com.ruhuiliu.ereader.data.BookStorage
 import com.ruhuiliu.ereader.data.db.AppDatabase
 import com.ruhuiliu.ereader.data.settings.SettingsRepository
 import com.ruhuiliu.ereader.translate.TranslationService
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,7 @@ class EReaderApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        PDFBoxResourceLoader.init(applicationContext)
         container = AppContainer(this)
     }
 }

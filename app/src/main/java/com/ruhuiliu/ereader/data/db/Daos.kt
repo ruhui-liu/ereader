@@ -45,6 +45,9 @@ interface BookDao {
     @Query("UPDATE books SET convertToHorizontal = :value WHERE id = :id")
     suspend fun setConvertToHorizontal(id: Long, value: Boolean)
 
+    @Query("UPDATE books SET pdfReflow = :value WHERE id = :id")
+    suspend fun setPdfReflow(id: Long, value: Boolean)
+
     @Query("UPDATE books SET title = :title, author = :author WHERE id = :id")
     suspend fun rename(id: Long, title: String, author: String)
 }

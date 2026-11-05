@@ -122,8 +122,9 @@ class ReaderWebView(context: Context) : WebView(context) {
                 settings.allowFileAccess = false
                 settings.allowContentAccess = false
                 settings.textZoom = 100
-                settings.setSupportZoom(false)
-                settings.builtInZoomControls = false
+                // Pinch-zoom is only enabled by the page (viewport meta) for original PDF pages.
+                settings.setSupportZoom(true)
+                settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.mediaPlaybackRequiresUserGesture = true
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {

@@ -23,3 +23,7 @@
 -dontwarn okio.**
 -dontwarn com.google.appengine.**
 -dontwarn javax.servlet.**
+
+# PdfBox-Android: the optional JPEG 2000 decoder is only needed for rendering, which uses the
+# platform PdfRenderer here.
+-dontwarn com.gemalto.jp2.**

@@ -53,10 +53,10 @@ object XmlDom {
     }
 
     private val HTML_ENTITIES = mapOf(
-        "nbsp" to " ", "copy" to "©", "reg" to "®", "trade" to "™", "mdash" to "—", "ndash" to "–",
+        "nbsp" to "\u00A0", "copy" to "©", "reg" to "®", "trade" to "™", "mdash" to "—", "ndash" to "–",
         "hellip" to "…", "lsquo" to "‘", "rsquo" to "’", "ldquo" to "“", "rdquo" to "”", "laquo" to "«",
-        "raquo" to "»", "middot" to "·", "bull" to "•", "emsp" to " ", "ensp" to " ",
-        "thinsp" to " ", "zwnj" to "‌", "zwj" to "‍", "shy" to "­", "times" to "×",
+        "raquo" to "»", "middot" to "·", "bull" to "•", "emsp" to "\u2003", "ensp" to "\u2002",
+        "thinsp" to "\u2009", "zwnj" to "\u200C", "zwj" to "\u200D", "shy" to "\u00AD", "times" to "×",
         "deg" to "°", "sect" to "§", "para" to "¶", "dagger" to "†", "Dagger" to "‡", "prime" to "′",
     )
 

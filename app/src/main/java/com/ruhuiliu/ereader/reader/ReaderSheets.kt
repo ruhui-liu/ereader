@@ -246,7 +246,20 @@ internal fun AppearanceSheet(vm: ReaderViewModel, s: ReaderSettings, book: BookE
                 Label("翻页方式")
                 Segmented(listOf("paged" to "左右翻页", "scroll" to "上下滚动"), s.pageMode) { v -> vm.updateReaderSettings { it.copy(pageMode = v) } }
             }
-            if (book?.vertical == true) {
+            if (book?.format == "PDF") {
+                Column {
+                    Label("PDF 显示方式")
+                    Segmented(listOf(false to "原版页面", true to "文字重排"), book.pdfReflow) { v -> vm.setPdfReflow(v) }
+                    Text(
+                        if (book.pdfReflow) "提取文字后重新排版：可调字体字号、双语对照逐段插入，竖排自动转为横排。图片较多或扫描的页面以图片显示。"
+                        else "按原样显示每一页，可双指缩放；开启翻译后，每页的译文显示在该页下方。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            }
+            if (book?.vertical == true && book.format != "PDF") {
                 Column {
                     Label("排版方向（本书原为竖排）")
                     Segmented(listOf(true to "转为横排 · 从左到右", false to "保持竖排 · 从右到左"), book.convertToHorizontal) { v -> vm.setConvertToHorizontal(v) }

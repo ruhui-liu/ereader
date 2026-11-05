@@ -190,6 +190,20 @@ fun ReaderScreen(
         if (state.loading) {
             CircularProgressIndicator(Modifier.align(Alignment.Center), color = fg)
         }
+        state.busy?.let { msg ->
+            Surface(
+                modifier = Modifier.align(Alignment.Center),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 4.dp,
+            ) {
+                Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(msg)
+                }
+            }
+        }
         state.error?.let { err ->
             Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("无法打开这本书", color = fg, style = MaterialTheme.typography.titleMedium)
@@ -207,7 +221,11 @@ fun ReaderScreen(
                     .windowInsetsPadding(WindowInsets.displayCutout),
                 color = fg.copy(alpha = .45f),
                 left = viewModel.chapterTitle(state.chapterIndex),
-                right = "${state.page + 1}/${state.pages}  ·  ${"%.1f".format(state.totalProgress * 100)}%",
+                right = if (state.pdfPage >= 0) {
+                    "第 ${state.pdfPage + 1}/${state.pdfPageCount} 页  ·  ${"%.1f".format(state.totalProgress * 100)}%"
+                } else {
+                    "${state.page + 1}/${state.pages}  ·  ${"%.1f".format(state.totalProgress * 100)}%"
+                },
             )
         }
 
@@ -251,6 +269,10 @@ fun ReaderScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    if (state.book?.format == "PDF") {
+                        val reflow = state.book?.pdfReflow == true
+                        TextButton(onClick = { viewModel.setPdfReflow(!reflow) }) { Text(if (reflow) "原版" else "重排") }
                     }
                     IconButton(onClick = { sheet = Sheet.SEARCH }) { Icon(Icons.Default.Search, "搜索") }
                     IconButton(onClick = { viewModel.toggleBookmark() }) {

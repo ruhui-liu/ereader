@@ -1,5 +1,6 @@
 package com.ruhuiliu.ereader.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -40,6 +41,8 @@ data class BookEntity(
     val sourceLang: String? = null,
     /** For vertical books: true = convert to horizontal left-to-right (default), false = keep original. */
     val convertToHorizontal: Boolean = true,
+    /** PDF only: show extracted, re-flowed text instead of the original page images. */
+    @ColumnInfo(defaultValue = "0") val pdfReflow: Boolean = false,
 )
 
 @Entity(

@@ -89,7 +89,7 @@ class LibraryViewModel(private val app: AppContainer) : ViewModel() {
                 _importing.value = "已导入 ${results.size} 个文件…"
             }
             _importing.value = null
-            if (results.isEmpty()) messages.send("文件夹中没有找到 EPUB / TXT / HTML 文件") else report(results)
+            if (results.isEmpty()) messages.send("文件夹中没有找到 EPUB / PDF / TXT / HTML 文件") else report(results)
         }
     }
 

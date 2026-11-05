@@ -72,7 +72,7 @@ import com.ruhuiliu.ereader.data.db.BookEntity
 import kotlin.math.roundToInt
 
 private val OPEN_MIME_TYPES = arrayOf(
-    "application/epub+zip", "text/plain", "text/html", "application/xhtml+xml", "application/octet-stream", "*/*",
+    "application/epub+zip", "application/pdf", "text/plain", "text/html", "application/xhtml+xml", "application/octet-stream", "*/*",
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,7 +197,7 @@ fun LibraryScreen(
         ModalBottomSheet(onDismissRequest = { showImport = false }) {
             Column(Modifier.padding(bottom = 24.dp)) {
                 Text("导入书籍", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-                ImportOption(Icons.AutoMirrored.Filled.InsertDriveFile, "本地文件", "选择 EPUB / TXT / HTML，可多选") {
+                ImportOption(Icons.AutoMirrored.Filled.InsertDriveFile, "本地文件", "选择 EPUB / PDF / TXT / HTML，可多选") {
                     showImport = false; pickFiles.launch(OPEN_MIME_TYPES)
                 }
                 ImportOption(Icons.Default.Folder, "本地文件夹", "导入文件夹（含子文件夹）中的所有书") {
@@ -339,7 +339,7 @@ private fun EmptyLibrary(onLocal: () -> Unit, onDrive: () -> Unit, onDropbox: ()
         Text("书架还是空的", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         Text(
-            "导入 EPUB、TXT 或 HTML 电子书。阅读英文、日文书时可以打开双语对照，竖排书会自动转为横排。",
+            "导入 EPUB、PDF、TXT 或 HTML 电子书。阅读英文、日文书时可以打开双语对照，竖排书会自动转为横排。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
